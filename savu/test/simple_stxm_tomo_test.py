@@ -13,13 +13,14 @@
 # limitations under the License.
 
 """
-.. module:: tomo_recon
+.. module:: stxm_tomo_recon
    :platform: Unix
    :synopsis: runner for tests using the MPI framework
 
 .. moduleauthor:: Mark Basham <scientificsoftware@diamond.ac.uk>
 
 """
+
 import unittest
 import tempfile
 from savu.test import test_utils as tu
@@ -27,26 +28,14 @@ from savu.test import test_utils as tu
 from savu.test.plugin_runner_test import run_protected_plugin_runner
 
 
-class PluginRunnerScikitImageTest(unittest.TestCase):
+class SimpleStxmTomoTest(unittest.TestCase):
 
-    def test_fbp(self):
+    def test_process(self):
         options = {
             "transport": "hdf5",
             "process_names": "CPU0",
-            "data_file": tu.get_test_data_path('24737.nxs'),
-            "process_file":
-            tu.get_test_data_path('scikit_fbp_test_process.nxs'),
-            "out_path": tempfile.mkdtemp()
-            }
-        run_protected_plugin_runner(options)
-
-    def test_sart(self):
-        options = {
-            "transport": "hdf5",
-            "process_names": "CPU0",
-            "data_file": tu.get_test_data_path('24737.nxs'),
-            "process_file":
-            tu.get_test_data_path('scikit_sart_test_process.nxs'),
+            "data_file": tu.get_test_data_path('mm.nxs'),
+            "process_file": tu.get_test_data_path('simplestxmtomotest.nxs'),
             "out_path": tempfile.mkdtemp()
             }
         run_protected_plugin_runner(options)
