@@ -46,7 +46,7 @@ class PyfaiAzimuthalIntegratorWithBraggFilter(BaseAzimuthalIntegrator):
     """
 
     def __init__(self):
-        logging.debug("Starting 1D azimuthal integrationr")
+        logging.debug("Starting 1D azimuthal integration")
         super(PyfaiAzimuthalIntegratorWithBraggFilter,
               self).__init__("PyfaiAzimuthalIntegratorWithBraggFilter")
 
@@ -57,7 +57,8 @@ class PyfaiAzimuthalIntegratorWithBraggFilter(BaseAzimuthalIntegrator):
         lims = self.parameters['thresh']
         num_bins_azim = self.parameters['num_bins_azim']
         num_bins_rad = self.parameters['num_bins']
-        remapped, q, chi = ai.integrate2d(data=data[0],npt_rad=num_bins_rad, npt_azim=num_bins_azim)
+        units = self.parameters['units']
+        remapped, axis, chi = ai.integrate2d(data=data[0],npt_rad=num_bins_rad, npt_azim=num_bins_azim)
         mask = np.ones_like(remapped)
         row_mask = np.zeros(mask.shape[0])
         mask[remapped==0] = 0
@@ -67,7 +68,8 @@ class PyfaiAzimuthalIntegratorWithBraggFilter(BaseAzimuthalIntegrator):
             top = np.percentile(foo,lims[1])
             bottom = np.percentile(foo,lims[0])
             out[i] = np.mean(np.clip(foo,bottom,top))
-        mData.set_meta_data('Q', q)
+        axis = self.unit_conversion(units,axis)
+        mData.set_meta_data('Q', axis) # multiplied because their units are wrong!
         return out
 
 

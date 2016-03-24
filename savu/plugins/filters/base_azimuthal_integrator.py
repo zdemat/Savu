@@ -36,7 +36,7 @@ class BaseAzimuthalIntegrator(BaseFilter, CpuPlugin):
     a base azimuthal integrator for pyfai
 
     :param use_mask: Should we mask. Default: False.
-    :param units: options are q_nm^-1 q_A^-1, 2th_deg 2th_rad r_mm d_nm. Default: "q_nm^-1".
+    :param units: options are q_nm^-1 and d_nm. Default: "q_nm^-1".
     :param num_bins: number of bins. Default: 1005.
 
     """
@@ -122,3 +122,12 @@ class BaseAzimuthalIntegrator(BaseFilter, CpuPlugin):
 
     def nOutput_datasets(self):
         return 1
+
+    def unit_conversion(self,units,axis):
+        if units=='q_nm^-1':
+            axis *= 1e3*1e10 # multiplied because their conversion is incorrect I think
+        elif units=='d_nm':
+            #  this is non-linear which is ok for DAWN, but interpolation smooths it.
+            q = axis*1e3*1e10
+            axis = 1.0/axis
+        return axis
