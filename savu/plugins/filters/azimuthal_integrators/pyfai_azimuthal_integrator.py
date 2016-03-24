@@ -44,14 +44,10 @@ class PyfaiAzimuthalIntegrator(BaseAzimuthalIntegrator):
               self).__init__("PyfaiAzimuthalIntegrator")
 
     def filter_frames(self, data):
-        t1 = time.time()
         mData = self.params[2]
         mask = self.params[0]
         ai = self.params[3]
         logging.debug("Running azimuthal integration")
-        fit = ai.xrpd(data=data[0], npt=self.npts)
+        fit = ai.integrate1d(data=data[0], npt=self.npts)
         mData.set_meta_data('Q', fit[0])
-#        mData.set_meta_data('integrated_diffraction_noise',fit[2])
-        t2 = time.time()
-        print "PyFAI iteration took:"+str((t2-t1)*1e3)+"ms"
         return fit[1]
