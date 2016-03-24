@@ -31,11 +31,8 @@ import time
 class PyfaiAzimuthalIntegrator(BaseAzimuthalIntegrator):
     """
     1D azimuthal integrator by pyFAI
-
     :param use_mask: Should we mask. Default: False.
-
     :param num_bins: number of bins. Default: 1005.
-
     """
 
     def __init__(self):
@@ -44,10 +41,11 @@ class PyfaiAzimuthalIntegrator(BaseAzimuthalIntegrator):
               self).__init__("PyfaiAzimuthalIntegrator")
 
     def filter_frames(self, data):
+        logging.debug("Running azimuthal integration")
         mData = self.params[2]
         mask = self.params[0]
         ai = self.params[3]
-        logging.debug("Running azimuthal integration")
+        units = self.parameters['units']
         fit = ai.integrate1d(data=data[0], npt=self.npts)
         mData.set_meta_data('Q', fit[0])
         return fit[1]

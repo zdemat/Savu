@@ -36,7 +36,7 @@ class BaseAzimuthalIntegrator(BaseFilter, CpuPlugin):
     a base azimuthal integrator for pyfai
 
     :param use_mask: Should we mask. Default: False.
-
+    :param units: options are q_nm^-1 q_A^-1, 2th_deg 2th_rad r_mm d_nm. Default: "q_nm^-1".
     :param num_bins: number of bins. Default: 1005.
 
     """
@@ -122,15 +122,3 @@ class BaseAzimuthalIntegrator(BaseFilter, CpuPlugin):
 
     def nOutput_datasets(self):
         return 1
-
-
-    def calcfrom1d(self, tth, I, twotheta_flat):
-        '''
-        takes the 1D data and makes it two d again
-        tth is the two theta from the integrator
-        I is the intensity from the integrator
-        ai is the integrator object
-        '''
-        interpedvals = np.interp(twotheta_flat, tth, I)
-        new_image = interpedvals.reshape(self.sh)
-        return new_image

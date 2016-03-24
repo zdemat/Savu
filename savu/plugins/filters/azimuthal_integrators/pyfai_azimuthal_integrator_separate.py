@@ -49,7 +49,7 @@ class PyfaiAzimuthalIntegratorSeparate(BaseAzimuthalIntegrator):
         mData = self.params[2]
         mask = self.params[0]
         ai = self.params[3]
-        
+        units = self.parameters['units']
         num_bins_azim = self.parameters['num_bins_azim']
         num_bins_rad = self.parameters['num_bins']
         percentile = self.parameters['percentile']
