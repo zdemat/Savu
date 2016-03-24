@@ -28,9 +28,9 @@ from savu.test.framework_tests.plugin_runner_test import \
     run_protected_plugin_runner
 
 
-class PyfaiTest(unittest.TestCase):
+class PyfaiFilteredTest(unittest.TestCase):
 
-    def test_pyfai_bragg_filter(self):
+    def test_pyfai_filtered(self):
         options = {
             "transport": "hdf5",
             "process_names": "CPU0",
