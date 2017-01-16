@@ -51,7 +51,6 @@ class I13PtychoLoader(BaseMultiModalLoader):
             h5py.File(exp.meta_data.get_meta_data("data_file"), 'r')
         logging.debug("Creating file '%s' '%s'_entry",
                       data_obj.backing_file.filename, 'ptycho')
-        
         data_obj.data = data_obj.backing_file['entry1/instrument/merlin_sw_hdf/data']
         data_obj.set_shape(data_obj.data.shape)
         try:
@@ -81,7 +80,7 @@ class I13PtychoLoader(BaseMultiModalLoader):
         ### GET THE AXES ###
         x = data_obj.backing_file['entry1/instrument/lab_sxy/lab_sx'].value*1e-6
         data_obj.meta_data.set_meta_data('x', x)
-        y = data_obj.backing_file['entry1/instrument/lab_sxy/lab_sxy/lab_sy'].value*1e-6
+        y = data_obj.backing_file['entry1/instrument/lab_sxy/lab_sy'].value*1e-6
         data_obj.meta_data.set_meta_data('y', y)
         if rotation_angle is not None:
             pos = np.zeros((x.shape[0],2,x.shape[1]))

@@ -42,7 +42,7 @@ class BasePtycho(BaseFilter, CpuPlugin): # also make one for gpu
         in_meta_data = in_dataset[0].meta_data# grab the positions from the metadata
         logging.debug('getting the positions...')
         self.positions = in_meta_data.get_meta_data('xy') # get the positions and bind them
-
+        print "The shape of the positions in the base set up is",str(self.positions.shape)
         # lets set up the axis labels for output datasets
         position_labels, probe_labels, object_labels, self.sh = self.setup_axis_labels(in_dataset)
         print "probe labels are:"+str(probe_labels)
@@ -76,7 +76,8 @@ class BasePtycho(BaseFilter, CpuPlugin): # also make one for gpu
         ### POSITIONS ###
         logging.debug('##### POSITIONS #####')
         positions = out_dataset[2]
-        positions_shape = self.sh + self.get_positions().shape
+        positions_shape = self.get_positions().shape
+        print "the shape for the positions is:"+str(self.get_positions().shape)
         logging.debug('positions shape is:%s',str(positions_shape))
         positions.create_dataset(axis_labels=position_labels,
                                  shape=positions_shape)
