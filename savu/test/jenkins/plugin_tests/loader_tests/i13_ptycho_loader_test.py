@@ -27,7 +27,7 @@ from savu.test.travis.framework_tests.plugin_runner_test import \
 
 
 class I13PtychoLoaderTest(unittest.TestCase):
-    @unittest.skip("Data isn't on a public path")
+#     @unittest.skip("Data isn't on a public path")
     def test_i13_ptycho(self):
         data_file = '/dls/i13-1/data/2016/mt14190-1/processing/tomo_processed/ptycho/ptycho_vds_testeroo.h5'
         process_file = '/dls/science/users/clb02321/DAWN_stable/Savu2/Savu/test_data/test_process_lists/basic_ptycho_process_i13.nxs'
