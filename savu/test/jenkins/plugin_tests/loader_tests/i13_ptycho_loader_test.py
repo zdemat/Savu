@@ -31,8 +31,9 @@ class I13PtychoLoaderTest(unittest.TestCase):
     def test_i13_ptycho(self):
         data_file = '/dls/i13-1/data/2016/mt14190-1/processing/tomo_processed/ptycho/ptycho_vds_testeroo.h5'
         process_file = '/dls/science/users/clb02321/DAWN_stable/Savu2/Savu/test_data/test_process_lists/basic_ptycho_process_i13.nxs'
+        out_path = '/dls/i13-1/data/2016/mt14190-1/processing/tomo_processed/ptycho/single_threaded/'
         run_protected_plugin_runner(tu.set_options(data_file,
-                                                   process_file=process_file))
+                                                   process_file=process_file,out_path=out_path))
 
 if __name__ == "__main__":
     unittest.main()

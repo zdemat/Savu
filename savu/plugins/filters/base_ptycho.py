@@ -55,6 +55,7 @@ class BasePtycho(BaseFilter, CpuPlugin): # also make one for gpu
         self.set_size_probe(in_dataset[0].get_shape()[-2:])
         logging.debug("##### PROBE #####")
         print("probe shape is:%s",str(self.get_size_probe()))
+        print "probe labels are"+str(probe_labels)
         probe.create_dataset(axis_labels=probe_labels,
                             shape=self.get_size_probe()) # create the dataset
         self.probe_pattern_setup(probe_labels, probe)
@@ -208,7 +209,8 @@ class BasePtycho(BaseFilter, CpuPlugin): # also make one for gpu
         trans_units = self.get_output_axis_units()
         
         probe_labels = list(core_labels) # take a copy
-        probe_labels.extend(['x.' + trans_units, 'y.' + trans_units, 'mode_idx.number'])
+        probe_labels = ['rotation_angle.degrees']
+        probe_labels.extend(['x.' + trans_units, 'y.' + trans_units])#, 'mode_idx.number'])
         logging.debug('the labels for the probe are:%s' % str(probe_labels))
         object_labels = list(core_labels)
         object_labels.extend(['x.' + trans_units, 'y.' + trans_units, 'mode_idx.number'])
@@ -248,9 +250,10 @@ class BasePtycho(BaseFilter, CpuPlugin): # also make one for gpu
 
 
     def set_projection_pattern(self, probe, rest_probe):
-        probe_proj_core = tuple([rest_probe[idx] for idx in (-3, -2)]) # hard coded since we set them just above
+        probe_proj_core = tuple([rest_probe[idx] for idx in (-2,-1)]) # hard coded since we set them just above
         probe_slice = tuple(set(rest_probe) - set(probe_proj_core))
         probe_proj = {'core_dir':probe_proj_core, 'slice_dir':probe_slice}
+        print "probe projections are:",str(probe_proj)
         probe.add_pattern("PROJECTION", **probe_proj)
         logging.debug('have added a PROJECTION pattern')
 
@@ -277,13 +280,3 @@ class BasePtycho(BaseFilter, CpuPlugin): # also make one for gpu
             obj_sino = {'core_dir':(rot_axis, x_axis), 'slice_dir':tuple(set(rest_obj) - set((rot_axis, x_axis)))}
             object_trans.add_pattern("SINOGRAM", **obj_sino) # for the tomography
             logging.debug('This is a tomography so I have added a SINOGRAM pattern to the object transmission') # the probe oscillates in time for each projection, set this as a time series pattern
-
-
-
-
-
-
-
-
-
-

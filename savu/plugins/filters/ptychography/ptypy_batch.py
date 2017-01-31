@@ -56,29 +56,34 @@ class PtypyBatch(BasePtycho):
         p.io.autoplot.make_movie = False
         p.io.autoplot.interval = -1
         p.scan.illumination = self.scan_file.probe.storages['S00G00'].data
+        p.engines.engine_00.numiter = 1
         self.p = p
 
     def filter_frames(self, data):
         k=0
         idx = self.get_global_frame_index()[0]
+        print "The slice list is:",self.get_current_slice_list()[0][0].start
         print "The full idx is ",str(idx)
-        for d in data:
-            # the current frame
-            print "the index is:",str(idx[k]) 
-            print len(data)
-            print (data[0].shape)
-            p = self.p
-            p.scans.savu.data.recipe.data = d
-            ix=idx[k]
-            print ix
-            positions = self.get_positions()[ix].T
-            print "The positions shape is:"+str(positions.shape)
-            p.scans.savu.data.recipe.positions = positions
-    #         self.p.scans.savu.data.recipe = self.r
-            P = Ptycho(self.p,level=5)
-            object_stack = P.obj.storages['S00G00'].data.astype(np.float)
-            probe_stack = P.probe.storages['S00G00'].data.astype(np.float)
-            k+=1
+        d = data[0]
+        # the current frame
+        print "the index is:",str(idx[k]) 
+        print len(data)
+        print (data[0].shape)
+        p = self.p
+        p.scans.savu.data.recipe.data = d
+        ix=idx[k]
+        print ix
+        positions = self.get_positions()[ix].T
+        print "The positions shape is:"+str(positions.shape)
+        p.scans.savu.data.recipe.positions = positions
+#         self.p.scans.savu.data.recipe = self.r
+        P = Ptycho(self.p,level=5)
+        object_stack = P.obj.storages['S00G00'].data
+        probe_stack = P.probe.storages['S00G00'].data[0]
+        sh = probe_stack.shape
+        print "the probe shape is:",str(sh)
+#         probe_stack = np.reshape(probe_stack,sh[1:]+(sh[0],))
+        k+=1
         return [probe_stack, object_stack, positions]#] add fourier error, realspace error
 
     def setup(self):
@@ -93,7 +98,7 @@ class PtypyBatch(BasePtycho):
         BasePtycho.setup(self)
 
     def get_num_probe_modes(self):
-        return self.p.scan.coherence.num_probe_modes
+        return 1
 
     def set_size_object(self, in_d1, positions, pobj):
         sh = self.scan_file.probe.storages['S00G00'].data.shape
@@ -105,6 +110,6 @@ class PtypyBatch(BasePtycho):
     
     def set_size_probe(self, probe_shape):
         sh = self.scan_file.probe.storages['S00G00'].data.shape
-        self.probe_size = (1,)+sh[1:]+(sh[0],)
+        self.probe_size = (1,)+sh[1:]
         print "probe size is" + str(self.probe_size)
 
