@@ -29,6 +29,8 @@ class DawnCompatibleTest(unittest.TestCase):
         inst = pu.load_plugin(plugin_path)
         sl = inst.__dict__['slice_list']
         exp = inst.__dict__['exp']
+        
+    
 
 if __name__=='__main__':
     unittest.main()

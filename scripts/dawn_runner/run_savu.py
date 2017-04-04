@@ -46,11 +46,9 @@ def runSavu(path2plugin, params, metaOnly, inputs, persistence):
             parameters = {}
                 # slight repack here
             for key in params.keys():
-                print "here"
                 val = params[key]["value"]
                 if type(val)==type(''):
                     val = val.replace('\n','').strip()
-                print val
                 parameters[key] = val
             print "initialising the object"
             plugin_object, axis_labels, axis_values = process_init(path2plugin, inputs, parameters)
