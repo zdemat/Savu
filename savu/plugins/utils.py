@@ -54,7 +54,7 @@ def dawn_compatible(clazz):
     dawn_plugins[clazz.__name__] = {}
     try:
         plugin_path = sys.modules[clazz.__module__].__file__
-        print plugin_path.split('.py')[0]+'.py'
+#         print plugin_path.split('.py')[0]+'.py'
         dawn_plugins[clazz.__name__]['path2plugin'] = plugin_path.split('.py')[0]+'.py' # looks out for .pyc files
     except Exception as e:
         print e
@@ -298,7 +298,6 @@ def get_plugins_paths():
 
 
 def populate_plugins():
-    print "I AM HERE"
     plugins_path = get_plugins_paths()
     savu_path = plugins_path[-1].split('savu')[0]
     savu_plugins = plugins_path[-1:]
