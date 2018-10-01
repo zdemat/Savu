@@ -43,12 +43,13 @@ class TomopyRecon(BaseRecon, CpuPlugin):
         mlem|osem|ospml_hybrid|ospml_quad|pml_hybrid|pml_quad\
         |sirt). Default: 'gridrec'.
     :u*param filter_name: Valid for fbp|gridrec, options: none|shepp|cosine|\
-     hann|hamming|ramlak|parzen|butterworth). Default: None
+     hann|hamming|ramlak|parzen|butterworth). Default: 'none'.
     :u*param reg_par: Regularization parameter for smoothing, valid for \
         ospml_hybrid|ospml_quad|pml_hybrid|pml_quad. Default: 0.0.
     :param n_iterations: Number of iterations - only valid for iterative \
     algorithms. Default: 1.
-    :~param init_vol: Hidden unrequired parameter. Default: None.
+    :~param init_vol: Not an option. Default: None.
+    :~param centre_pad: Not an option. Default: None.
     """
 
     def __init__(self):
@@ -57,7 +58,11 @@ class TomopyRecon(BaseRecon, CpuPlugin):
     def pre_process(self):
         self.sl = self.get_plugin_in_datasets()[0].get_slice_dimension()
         vol_shape = self.get_vol_shape()
-        options = {'filter_name': self.parameters['filter_name'],
+
+        filter_name = self.parameters['filter_name']
+        # for backwards compatibility
+        filter_name = 'none' if filter_name == None else filter_name
+        options = {'filter_name': filter_name,
                    'reg_par': self.parameters['reg_par']-1,
                    'n_iterations': self.parameters['n_iterations'],
                    'num_gridx': vol_shape[0], 'num_gridy': vol_shape[2]}
@@ -73,26 +78,23 @@ class TomopyRecon(BaseRecon, CpuPlugin):
     def process_frames(self, data):
         self.sino = data[0]
         self.cors, angles, vol_shape, init = self.get_frame_params()
+
         if init:
             self.kwargs['init_recon'] = init
 
         recon = tomopy.recon(self.sino, np.deg2rad(angles),
                              center=self.cors[0], ncore=1, algorithm=self.alg,
                              **self.kwargs)
-
         return self._finalise_data(recon)
 
     def _apply_mask(self, recon):
-        ratio = self._get_ratio(self.sino, self.cors[0])
-        return self._transpose(tomopy.circ_mask(recon, axis=0, ratio=ratio))
+        ratio = self.parameters['ratio']
+        if ratio:
+            recon = tomopy.circ_mask(recon, axis=0, ratio=ratio)
+        return self._transpose(recon)
 
     def _transpose(self, recon):
         return np.transpose(recon, (1, 0, 2))
-
-    def _get_ratio(self, sino, cor):
-        default = self.parameters['ratio']
-        fraction = self.get_fov_fraction(sino, cor)
-        return default*fraction
 
     def get_max_frames(self):
         return 'multiple'
@@ -154,3 +156,4 @@ class TomopyRecon(BaseRecon, CpuPlugin):
              "%D 2014" +
              "%I International Union of Crystallography")
         cite_info.doi = "doi: 10.1107/S1600577514013939"
+        return cite_info

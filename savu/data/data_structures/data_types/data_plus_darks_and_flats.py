@@ -31,20 +31,24 @@ from savu.data.data_structures.data_types.base_type import BaseType
 class DataWithDarksAndFlats(BaseType):
 
     def __init__(self, data_obj, proj_dim, image_key):
-        self.data_obj = data_obj
+        super(DataWithDarksAndFlats, self).__init__()
         self.fscale = 1
         self.dscale = 1
         self.flat_updated = False
         self.dark_updated = False
-        self.image_key = image_key
         self.data = data_obj.data
-        self.proj_dim = proj_dim
-        self.dark_flat_slice_list = None
+        self.dark_flat_slice_list = []
+        self.dtype = data_obj.data.dtype
 
-    def _copy_base(self, new_obj):
-        new_obj.flat_updated = self.flat_updated
-        new_obj.dark_updated = self.dark_updated
-        self._set_dark_and_flat()
+    def _base_extra_params(self):
+        """ global class parameter names that are updated outside of __init__
+        """
+        extras = ['fscale', 'dscale', 'dark_updated', 'flat_updated',
+                  'dark_flat_slice_list']
+        return extras
+
+    def _override_data_type(self, data):
+        self.data = data
 
     def get_image_key(self):
         preview_sl = self.data_obj.get_preview()._get_preview_slice_list()
@@ -144,18 +148,31 @@ class DataWithDarksAndFlats(BaseType):
 
     def __get_data(self, key):
         index = [slice(None)]*self.nDims
-        index[self.proj_dim] = self.get_index(key)
+        rot_dim = self.data_obj.get_data_dimension_by_axis_label(
+                'rotation_angle')
+
+        # separate the transfer of data for slice lists with entries far \
+        # apart, as this significantly improves hdf5 performance.
+        split_diff = 10
+        k_idx = self.get_index(key)
+        if not k_idx.size:
+            return np.array([])
+
+        k_idx = np.split(k_idx, np.where(np.diff(k_idx) > split_diff)[0]+1)
+
+        index[self.proj_dim] = k_idx[0]
         data = self.data[tuple(index)]
 
-        if not self.dark_flat_slice_list:
+        for idx in k_idx[1:]:
+            index[self.proj_dim] = idx
+            data = np.append(data, self.data[tuple(index)], axis=rot_dim)
+
+        if not self.dark_flat_slice_list[key]:
             return data
 
-        sl = list(copy.deepcopy(self.dark_flat_slice_list))
+        sl = list(copy.deepcopy(self.dark_flat_slice_list[key]))
         if len(data.shape) is 2:
-            rot_dim = self.data_obj.get_data_dimension_by_axis_label(
-                    'rotation_angle')
             del sl[rot_dim]
-
         return data[sl]
 
     def dark_image_key_data(self):
@@ -169,18 +186,30 @@ class DataWithDarksAndFlats(BaseType):
     def update_dark(self, data):
         self.dark_updated = data
         self.dscale = 1
+        self.dark_flat_slice_list[2] = None
         self.data_obj.meta_data.set('dark', self._calc_mean(data))
 
     def update_flat(self, data):
         self.flat_updated = data
         self.fscale = 1
+        self.dark_flat_slice_list[1] = None
         self.data_obj.meta_data.set('flat', self._calc_mean(data))
+
+    def _set_dark_and_flat(self):
+        slice_list = self.data_obj._preview._get_preview_slice_list()
+        if slice_list:
+            self.dark_flat_slice_list = \
+                [tuple(self.get_dark_flat_slice_list())]*3
 
 
 class ImageKey(DataWithDarksAndFlats):
     """ This class is used to get data from a dataset with an image key. """
 
     def __init__(self, data_obj, image_key, proj_dim, ignore=None):
+        self.data_obj = data_obj
+        self.image_key = image_key
+        self.proj_dim = proj_dim
+        self.ignore = ignore
         super(ImageKey, self).__init__(data_obj, proj_dim, image_key)
         self.shape = self._get_image_key_data_shape()
         self.nDims = len(self.shape)
@@ -188,11 +217,30 @@ class ImageKey(DataWithDarksAndFlats):
         if ignore:
             self.__ignore_image_key_entries(ignore)
 
+    def clone_data_args(self, args, kwargs, extras):
+        """ List the arguments required to clone this datatype
+        """
+        args = ['self', 'image_key', 'proj_dim']
+        kwargs['ignore'] = 'ignore'
+        extras = self._base_extra_params()
+        return args, kwargs, extras
+
+    def map_input_args(self, args, kwargs, cls, extras):
+        """ List all information required to keep this data set after a plugin
+        has completed (may require conversion to another type)
+        """
+        args = ['self', None, 'proj_dim']
+        kwargs['dark'] = 'dark'
+        kwargs['flat'] = 'flat'
+        extras = self._base_extra_params()
+        cls = NoImageKey.__module__ + '.NoImageKey'
+        return args, kwargs, cls, extras
+
+    def _finish_cloning(self):
+        self.dark_flat_slice_list[0] = None
+
     def __getitem__(self, idx):
         return self._getitem(idx)
-
-    def _copy(self, new_obj):
-        self._copy_base(new_obj)
 
     def __ignore_image_key_entries(self, ignore):
         a, a, start, end = self._get_start_end_idx(self.get_index(1))
@@ -211,45 +259,53 @@ class ImageKey(DataWithDarksAndFlats):
         return self.flat_updated if self.flat_updated is not False else\
             self.flat_image_key_data()
 
-    def _set_dark_and_flat(self):
-        slice_list = self.data_obj._preview._get_preview_slice_list()
-        if slice_list:
-            self.dark_flat_slice_list = tuple(self.get_dark_flat_slice_list())
-#        if len(self.get_index(2)):
-#            self.data_obj.meta_data.set('dark', self.dark_mean())
-#        if len(self.get_index(1)):
-#            self.data_obj.meta_data.set('flat', self.flat_mean())
-
 
 class NoImageKey(DataWithDarksAndFlats):
     """ This class is used to get data from a dataset with separate darks and
         flats. """
 
-    def __init__(self, data_obj, image_key, proj_dim):
+    def __init__(self, data_obj, image_key, proj_dim, dark=None, flat=None):
+        self.data_obj = data_obj
+        self.image_key = image_key
+        self.proj_dim = proj_dim
         super(NoImageKey, self).__init__(data_obj, proj_dim, image_key)
-        self.dark_path = None
-        self.flat_path = None
+        self.dark_path = dark
+        self.flat_path = flat
         self.orig_image_key = copy.copy(image_key)
         self.flat_image_key = False
         self.dark_image_key = False
+
+        # darks and flats belong to another dataset with an image key
         if self.image_key is not None:
             self.shape = self._get_image_key_data_shape()
             self._getitem = self._getitem_imagekey
         else:
             self.shape = data_obj.data.shape
             self._getitem = self._getitem_noimagekey
+
         self.data_obj = data_obj
         self.nDims = len(self.shape)
+
+    def clone_data_args(self, args, kwargs, extras):
+        # these are the arguments required when creating a class instance
+        args = ['self', 'image_key', 'proj_dim']  # always 'self goes first'
+        kwargs['dark'] = 'dark_path'
+        kwargs['flat'] = 'flat_path'
+        # global class parameter names that are updated outside of __init__
+        extras = ['image_key', 'flat_image_key', 'flat_path',
+                  'dark_image_key', 'dark_path'] + self._base_extra_params()
+        return args, kwargs, extras
 
     def __getitem__(self, idx):
         return self._getitem(idx)
 
-    def _copy(self, new_obj):
-        new_obj.dark_path = self.dark_path
-        new_obj.flat_path = self.flat_path
-        new_obj.flat_image_key = self.flat_image_key
-        new_obj.dark_image_key = self.dark_image_key
-        self._copy_base(new_obj)
+    def _post_clone_updates(self):
+        self.dark_flat_slice_list[0] = None
+
+    def _set_fake_key(self, fakekey):
+        # useful if the darks and flats did belong to data with an
+        # image key in a previous plugin
+        self.image_key = fakekey
 
     def _set_flat_path(self, path, imagekey=False):
         self.flat_image_key = imagekey
@@ -264,38 +320,22 @@ class NoImageKey(DataWithDarksAndFlats):
 
     def dark(self):
         """ Get the dark data. """
-        if self.dark_updated:
+        if self.dark_updated is not False:
             return self.dark_updated
-        if self.dark_image_key is not False:
+        if self.dark_image_key:
             self.image_key = self.dark_image_key
             dark = self.dark_image_key_data()
             self.image_key = self.orig_image_key
             return dark
-
-        return self.dark_path[self.dark_flat_slice_list]*self.dscale
+        return self.dark_path[self.dark_flat_slice_list[2]]*self.dscale
 
     def flat(self):
         """ Get the flat data. """
-        if self.flat_updated:
-            return self.flat_updated()
-        if self.flat_image_key is not False:
+        if self.flat_updated is not False:
+            return self.flat_updated
+        if self.flat_image_key:
             self.image_key = self.flat_image_key
             flat = self.flat_image_key_data()
             self.image_key = self.orig_image_key
             return flat
-        return self.flat_path[self.dark_flat_slice_list]*self.fscale
-
-    def _set_dark_and_flat(self):
-        self.dark_flat_slice_list = self.get_dark_flat_slice_list()
-        # remove extra dimension if 3d to 4d mapping
-        from savu.data.data_structures.data_types.map_3dto4d_h5 \
-            import Map3dto4dh5
-        if Map3dto4dh5 in self.__class__.__bases__:
-            del self.dark_flat_slice_list[-1]
-
-#        if len(self.dark_flat_slice_list) < len(self.dark_path.shape):
-            # change dimensions here
-
-        self.dark_flat_slice_list = tuple(self.dark_flat_slice_list)
-#        self.data_obj.meta_data.set('dark', self.dark_mean())
-#        self.data_obj.meta_data.set('flat', self.flat_mean())
+        return self.flat_path[self.dark_flat_slice_list[1]]*self.fscale

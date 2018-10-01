@@ -46,10 +46,16 @@ def __option_parser():
     parser.add_argument('out_folder', help='Output folder.')
     parser.add_argument('--version', action='version', version=version)
     parser.add_argument("-f", "--folder", help="Override output folder name")
+
     tmp_help = "Store intermediate files in a temp directory."
     parser.add_argument("-d", "--tmp", help=tmp_help)
+
+    template_help = "Pass a template file of plugin input parameters."
+    parser.add_argument("-t", "--template", help=template_help, default=None)
+
     log_help = "Store full log file in a separate location"
     parser.add_argument("-l", "--log", help=log_help)
+
     v_help = "Display all debug log messages"
     parser.add_argument("-v", "--verbose", help=v_help, action="store_true",
                         default=False)
@@ -59,13 +65,15 @@ def __option_parser():
     parser.add_argument("--lustre_workaround", action="store_true",
                         dest="lustre", help="Avoid lustre segmentation fault",
                         default=False)
+    sys_params_help = "Override default path to Savu system parameters file."
+    parser.add_argument("--system_params", help=sys_params_help, default=None)
 
     # Hidden arguments
     # process names
     parser.add_argument("-n", "--names", help=hide, default="CPU0")
     # transport mechanism
-    parser.add_argument("-t", "--transport", help=hide, default="hdf5")
-    # Set logging to cluster mode
+    parser.add_argument("--transport", help=hide, default="hdf5")
+    # Set Savu mode
     parser.add_argument("-m", "--mode", help=hide, default="full",
                         choices=['basic', 'full'])
     # Set logging to cluster mode
@@ -74,7 +82,8 @@ def __option_parser():
     # Send an email on completion
     parser.add_argument("-e", "--email", dest="email", help=hide, default=None)
     # Facility email for errors
-    parser.add_argument("--facility_email", dest="femail", help=hide, default=None)
+    parser.add_argument("--facility_email", dest="femail", help=hide,
+                        default=None)
     # Set beamline log file (for online processing)
     parser.add_argument("--bllog", dest="bllog", help=hide, default=None)
     # Location of syslog server
@@ -82,11 +91,37 @@ def __option_parser():
                         default='localhost')
     # Port to connect to syslog server on
     parser.add_argument("-p", "--syslog_port", dest="syslog_port",
-                        help=hide, default=514)
+                        help=hide, default=514, type=int)
     parser.add_argument("--test_state", dest="test_state", default='False',
                         action='store_true', help=hide)
 
-    return parser.parse_args()
+    # DosNa related parameters
+    parser.add_argument("--dosna_backend", dest="dosna_backend", help=hide,
+                        default=None)
+    parser.add_argument("--dosna_engine", dest="dosna_engine", help=hide,
+                        default=None)
+    parser.add_argument("--dosna_connection", dest="dosna_connection",
+                        help=hide, default=None)
+    parser.add_argument("--dosna_connection_options",
+                        dest="dosna_connection_options", help=hide,
+                        nargs='+', default=[])
+
+    check_help = "Continue Savu processing from a checkpoint."
+    choices = ['plugin', 'subplugin']
+    parser.add_argument("--checkpoint", nargs="?", choices=choices,
+                        const='plugin', help=check_help, default=None)
+
+    args = parser.parse_args()
+    __check_conditions(parser, args)
+    return args
+
+
+def __check_conditions(parser, args):
+    if args.checkpoint and not args.folder:
+        msg = "--checkpoint flag requires '-f folder_name', where folder_name"\
+              " contains the partially completed Savu job.  The out_folder"\
+              " should be the path to this folder."
+        parser.error(msg)
 
 
 def _set_options(args):
@@ -101,6 +136,7 @@ def _set_options(args):
     options['data_file'] = args.in_file
     options['process_file'] = args.process_list
     options['mode'] = args.mode
+    options['template'] = args.template
     options['transport'] = 'basic' if args.mode == 'basic' else args.transport
     options['process_names'] = args.names
     options['verbose'] = args.verbose
@@ -113,6 +149,7 @@ def _set_options(args):
     options['bllog'] = args.bllog
     options['email'] = args.email
     options['femail'] = args.femail
+    options['system_params'] = args.system_params
 
     out_folder_name = \
         args.folder if args.folder else __get_folder_name(options['data_file'])
@@ -120,15 +157,23 @@ def _set_options(args):
 
     options['out_folder'] = out_folder_name
     options['out_path'] = out_folder_path
-    options['datafile_name'] = os.path.splitext(
-            os.path.basename(args.in_file))[0]
+
+    basename = os.path.basename(args.in_file)
+    options['datafile_name'] = os.path.splitext(basename)[0] if basename \
+        else args.in_file.split(os.sep)[-2]
 
     inter_folder_path = __create_output_folder(args.tmp, out_folder_name)\
         if args.tmp else out_folder_path
     options['inter_path'] = inter_folder_path
-
     options['log_path'] = args.log if args.log else options['inter_path']
     options['nProcesses'] = len(options["process_names"].split(','))
+    # DosNa related options
+    options["dosna_backend"] = args.dosna_backend
+    options["dosna_engine"] = args.dosna_engine
+    options["dosna_connection"] = args.dosna_connection
+    options["dosna_connection_options"] = args.dosna_connection_options
+
+    options['checkpoint'] = args.checkpoint
 
     return options
 
@@ -140,8 +185,8 @@ def __get_folder_name(in_file):
     MPI.COMM_WORLD.barrier()
     split = in_file.split('.')
 
-    if len(split[-1].split('/')) > 1:
-        split = in_file.split('/')
+    if len(split[-1].split(os.sep)) > 1:
+        split = in_file.split(os.sep)
         name = split[-2] if split[-1] == '' else split[-1]
     # if the input is a file
     else:
@@ -164,7 +209,6 @@ def main(input_args=None):
         args = input_args
 
     options = _set_options(args)
-
     pRunner = PluginRunner if options['mode'] == 'full' else BasicPluginRunner
 
     if options['nProcesses'] == 1:

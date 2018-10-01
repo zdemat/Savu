@@ -22,10 +22,11 @@
 
 """
 import copy
+import h5py
 import numpy as np
 
-import savu.data.data_structures.data_notes as notes
 from savu.core.utils import docstring_parameter
+import savu.data.data_structures.data_notes as notes
 
 
 class DataCreate(object):
@@ -56,7 +57,8 @@ class DataCreate(object):
         {0} \n {1} \n {2} \n {3}
 
         """
-        self.dtype = kwargs.get('dtype', np.float32)
+        #self.dtype = 
+        self.set_dtype(kwargs.get('dtype', np.float32))
         self.remove = kwargs.get('remove', False)
         self.raw = kwargs.get('raw', False)
         self.transport = kwargs.get('transport', None)
@@ -70,6 +72,23 @@ class DataCreate(object):
             self.__create_dataset_from_kwargs(kwargs)
         self.get_preview().set_preview([])
 
+    def set_dtype(self, dtype):
+        if not dtype:
+            if not self.data:
+                plugin = self._get_plugin_data()._plugin.__class__.__name__
+                raise Exception("Please create all output datasets before "
+                                "setting plugin data in %s plugin.\n" % plugin)
+            elif hasattr(self.data, 'dtype'):
+                dtype = self.data.dtype
+            else:
+                h5 = h5py._hl.dataset.Dataset
+                dtype = self.data.dtype if isinstance(self.data, h5) else \
+                    self.data.data.dtype
+        self.dtype = np.dtype(dtype)
+
+    def get_dtype(self):
+        return self.dtype
+
     def __create_dataset_from_object(self, data_obj):
         """ Create a dataset from an existing Data object.
         """
@@ -77,8 +96,7 @@ class DataCreate(object):
         self.__copy_labels(data_obj)
         self.__find_and_set_shape(data_obj)
         self._set_data_patterns(patterns)
-        if self.raw:
-            self.raw = data_obj.data
+        self.raw = data_obj.data if self.raw else None
 
     def __create_dataset_from_kwargs(self, kwargs):
         """ Create dataset from kwargs. """
@@ -224,8 +242,7 @@ class DataCreate(object):
         axis_labels = self.get_axis_labels()
         label = label.split('~')[1].split('.')
         axis_labels.insert(int(label[0]), {label[1]: label[2]})
-        self.data_info.set(
-            'nDims', self.data_info.get('nDims') + 1)
+        self.data_info.set('nDims', self.data_info.get('nDims') + 1)
 
     def _set_data_patterns(self, patterns):
         """ Add missing dimensions to patterns and populate data info dict. """
@@ -244,16 +261,3 @@ class DataCreate(object):
         pData._set_shape_before_tuning(copy.copy(data.get_shape()))
         new_shape = copy.copy(data.get_shape()) + tuple(pData.extra_dims)
         self.set_shape(new_shape)
-
-    def _add_raw_data_obj(self, data_obj):
-        from savu.data.data_structures.data_type import ImageKey, NoImageKey
-        proj_dim = self.get_data_dimension_by_axis_label('rotation_angle')
-        if isinstance(data_obj.raw, ImageKey):
-            data_obj.data = \
-                ImageKey(data_obj, data_obj.raw.image_key, proj_dim)
-            data_obj.raw._copy(data_obj)
-        elif isinstance(data_obj.raw, NoImageKey):
-            data_obj.data = NoImageKey(data_obj, proj_dim)
-            data_obj.raw._copy(data_obj)
-        else:
-            raise Exception('Raw data type not recognised.')

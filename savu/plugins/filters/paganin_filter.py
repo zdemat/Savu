@@ -15,7 +15,7 @@
 """
 .. module:: paganin_filter
    :platform: Unix
-   :synopsis: A plugin to apply the Paganin filter
+   :synopsis: A plugin to apply the Paganin filter.
 
 .. moduleauthor:: Nghia Vo <scientificsoftware@diamond.ac.uk>
 
@@ -35,7 +35,7 @@ from savu.data.plugin_list import CitationInformation
 @register_plugin
 class PaganinFilter(BaseFilter, CpuPlugin):
     """
-    A plugin to apply Paganin filter (contrast enhancement) on projections
+    A plugin to apply Paganin filter (contrast enhancement) on projections.
 
     :param Energy: Given X-ray energy in keV. Default: 53.0.
     :param Distance: Distance from sample to detection - Unit is \
@@ -46,10 +46,10 @@ class PaganinFilter(BaseFilter, CpuPlugin):
     :param Padleftright: Pad to the left and right of projection. Default: 10.
     :param Padmethod: Numpy pad method. Default: 'edge'.
     :param increment: Increment all values by this amount before taking the \
-        log. Default: 1.0.
+        log. Default: 0.0.
 
     :config_warn: The 'log' parameter in the reconstruction should be set to \
-    FALSE..
+    FALSE.
     :config_warn: Previewing a subset of sinograms will alter the result, due \
     to the global nature of this filter. If this is necessary, ensure they \
     are consecutive.
@@ -82,36 +82,36 @@ class PaganinFilter(BaseFilter, CpuPlugin):
         micron = 10**(-6)
         keV = 1000.0
         distance = self.parameters['Distance']
-        energy = self.parameters['Energy']*keV
-        resolution = self.parameters['Resolution']*micron
-        wavelength = (1240.0/energy)*10.0**(-9)
+        energy = self.parameters['Energy'] * keV
+        resolution = self.parameters['Resolution'] * micron
+        wavelength = (1240.0 / energy) * 10.0**(-9)
         ratio = self.parameters['Ratio']
 
-        height1 = height + 2*self.parameters['Padtopbottom']
-        width1 = width + 2*self.parameters['Padleftright']
-        centery = np.ceil(height1/2.0)-1.0
-        centerx = np.ceil(width1/2.0)-1.0
+        height1 = height + 2 * self.parameters['Padtopbottom']
+        width1 = width + 2 * self.parameters['Padleftright']
+        centery = np.ceil(height1 / 2.0) - 1.0
+        centerx = np.ceil(width1 / 2.0) - 1.0
 
         # Define the paganin filter
-        dpx = 1.0/(width1*resolution)
-        dpy = 1.0/(height1*resolution)
-        pxlist = (np.arange(width1)-centerx)*dpx
-        pylist = (np.arange(height1)-centery)*dpy
+        dpx = 1.0 / (width1 * resolution)
+        dpy = 1.0 / (height1 * resolution)
+        pxlist = (np.arange(width1) - centerx) * dpx
+        pylist = (np.arange(height1) - centery) * dpy
         pxx = np.zeros((height1, width1), dtype=np.float32)
         pxx[:, 0:width1] = pxlist
         pyy = np.zeros((height1, width1), dtype=np.float32)
         pyy[0:height1, :] = np.reshape(pylist, (height1, 1))
-        pd = (pxx*pxx+pyy*pyy)*wavelength*distance*math.pi
+        pd = (pxx * pxx + pyy * pyy) * wavelength * distance * math.pi
 
-        filter1 = 1.0+ratio*pd
-        self.filtercomplex = filter1+filter1*1j
+        filter1 = 1.0 + ratio * pd
+        self.filtercomplex = filter1 + filter1 * 1j
 
     def _paganin(self, data):
         pci1 = fft.fft2(np.float32(data))
-        pci2 = fft.fftshift(pci1)/self.filtercomplex
+        pci2 = fft.fftshift(pci1) / self.filtercomplex
         fpci = np.abs(fft.ifft2(pci2))
-        result = -0.5*self.parameters['Ratio']*np.log(
-            fpci+self.parameters['increment'])
+        result = -0.5 * self.parameters['Ratio'] * np.log(
+            fpci + self.parameters['increment'])
         return result
 
     def process_frames(self, data):
@@ -158,4 +158,3 @@ class PaganinFilter(BaseFilter, CpuPlugin):
              "%I Wiley Online Library\n")
         cite_info.doi = "doi: DOI: 10.1046/j.1365-2818.2002.01010.x"
         return cite_info
-

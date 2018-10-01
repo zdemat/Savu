@@ -64,7 +64,7 @@ def get_experiment_types():
     exp_dict['tomoRaw'] = {'func': 'set_tomoRaw_experiment',
                            'filename': '24737.nxs'}
     exp_dict['tomo'] = {'func': 'set_tomo_experiment',
-                        'filename': 'savu_projections.h5'}
+                        'filename': '24737_processed.nxs'}
     exp_dict['fluo'] = {'func': 'set_fluo_experiment',
                         'filename': 'fluo.nxs'}
     exp_dict['tomo_3dto4d'] = {'func': 'set_3dto4d_experiment',
@@ -91,8 +91,8 @@ def set_tomoRaw_experiment(filename, **kwargs):
 
 
 def set_tomo_experiment(filename, **kwargs):
-    options = set_options(get_test_data_path(filename), **kwargs)
-    options['loader'] = 'savu.plugins.loaders.savu_loader'
+    options = set_options(get_test_data_path('/full_field_corrected/' + filename), **kwargs)
+    options['loader'] = 'savu.plugins.loaders.savu_nexus_loader'
     return options
 
 
@@ -166,12 +166,14 @@ def set_options(path, **kwargs):
     options['log_path'] = options['out_path']
     options['run_type'] = 'test'
     options['verbose'] = 'True'
-    options['link_type'] = 'final_result'
+    #options['link_type'] = 'final_result'
     options['test_state'] = True
     options['lustre'] = False
     options['bllog'] = None
     options['email'] = None
-
+    options['template'] = None
+    options['checkpoint'] = None
+    options['system_params'] = None
     return options
 
 
@@ -187,9 +189,10 @@ def _add_loader_to_plugin_list(options, params={}):
     options['plugin_list'] = plugin_list
 
 
-def load_random_data(loader, params):
+def load_random_data(loader, params, system_params=None):
     options = set_options(get_test_data_path('24737.nxs'))
     options['loader'] = 'savu.plugins.loaders.' + str(loader)
+    options['system_params'] = system_params
     _add_loader_to_plugin_list(options, params=params)
     return plugin_runner(options)
 

@@ -20,6 +20,7 @@ Created on 21 May 2015
 
 from __future__ import print_function
 
+import re
 import sys
 
 from content import Content
@@ -90,7 +91,8 @@ def _save(content, args):
     print()
     DispDisplay(content.plugin_list)._notices()
     content.save(out_file, check=raw_input("Are you sure you want to save the "
-                 "current data to %s' [y/N]" % (out_file)))
+                 "current data to %s' [y/N]" % (out_file)),
+                 template=args.template)
     return content
 
 
@@ -108,7 +110,8 @@ def _mod(content, args):
 @error_catcher
 def _set(content, args):
     """ Set the status of the plugin to be on or off. """
-    content.on_and_off(args.plugin_pos, args.status.upper())
+    for pos in args.plugin_pos:
+        content.on_and_off(pos, args.status.upper())
     _disp(content, '-q')
     return content
 
@@ -118,7 +121,7 @@ def _set(content, args):
 def _add(content, args):
     """ Add a plugin to the list. """
     elems = content.get_positions()
-    final = str(int(list(elems[-1])[0])+1) if elems else 1
+    final = str(int(re.findall(r'\d+', elems[-1])[0])+1) if elems else 1
     content.add(args.name, args.pos if args.pos else str(final))
     _disp(content, '-q')
     return content
@@ -228,7 +231,12 @@ def main():
     print("\n*** Press Enter for a list of available commands. ***\n")
 
     while True:
-        in_list = raw_input(">>> ").strip().split(' ', 1)
+        try:
+            in_list = raw_input(">>> ").strip().split(' ', 1)
+        except KeyboardInterrupt:
+            print()
+            continue
+
         command, arg = in_list if len(in_list) is 2 else in_list+['']
         command = command if command else 'help'
         if command not in commands:
@@ -247,4 +255,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

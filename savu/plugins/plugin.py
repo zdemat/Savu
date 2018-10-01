@@ -52,6 +52,8 @@ class Plugin(PluginDatasets):
         self.docstring_info = {}
         self.slice_list = None
         self.global_index = None
+        self.pcount = 0
+        self.exp = None
 
     def _main_setup(self, exp, params):
         """ Performs all the required plugin setup.
@@ -63,15 +65,19 @@ class Plugin(PluginDatasets):
         :param Experiment exp: The current Experiment object.
         :params dict params: Parameter values.
         """
-        self.exp = exp
+        self.__reset_process_frames_counter()
         self._set_parameters(params)
         self._set_plugin_datasets()
         self.setup()
         self.set_filter_padding(*(self.get_plugin_datasets()))
+        self._finalise_datasets()
+        self._finalise_plugin_datasets()
 
-        in_data, out_data = self.get_datasets()
-        for data in in_data + out_data:
-            data._finalise_patterns()
+    def __reset_process_frames_counter(self):
+        self.pcount = 0
+
+    def get_process_frames_counter(self):
+        return self.pcount
 
     def _set_parameters_this_instance(self, indices):
         """ Determines the parameters for this instance of the plugin, in the
@@ -205,6 +211,10 @@ class Plugin(PluginDatasets):
                 seq = value[0].split(':')
                 seq = [eval(s) for s in seq]
                 value = list(np.arange(seq[0], seq[1], seq[2]))
+                if len(value) == 0:
+                    raise RuntimeError(
+                        'No values for tuned parameter "{}", '
+                        'ensure start:stop:step; values are valid.'.format(key))
             if type(value[0]) != dtype:
                 try:
                     value.remove('')
@@ -248,8 +258,10 @@ class Plugin(PluginDatasets):
         return data
 
     def plugin_process_frames(self, data):
-        return self.base_process_frames_after(self.process_frames(
+        frames = self.base_process_frames_after(self.process_frames(
                 self.base_process_frames_before(data)))
+        self.pcount += 1
+        return frames
 
     def process_frames(self, data):
         """
@@ -283,7 +295,11 @@ class Plugin(PluginDatasets):
             return True
         preview = data.get_preview()
         orig_indices = preview.get_starts_stops_steps()
-        no_preview = [[0, 0, 0], data.get_shape(), [1, 1, 1], [1, 1, 1]]
+        nDims = len(orig_indices[0])
+        no_preview = [[0]*nDims, data.get_shape(), [1]*nDims, [1]*nDims]
+
+        # Set previewing params if previewing has not already been applied to
+        # the dataset.
         if no_preview == orig_indices:
             data.get_preview().revert_shape = data.get_shape()
             data.get_preview().set_preview(params)
@@ -293,6 +309,7 @@ class Plugin(PluginDatasets):
     def _clean_up(self):
         """ Perform necessary plugin clean up after the plugin has completed.
         """
+        self._clone_datasets()
         self.__copy_meta_data()
         self.__set_previous_patterns()
         self.__clean_up_plugin_data()
@@ -362,9 +379,9 @@ class Plugin(PluginDatasets):
         self.global_index = frame_idx
 
     def get_global_frame_index(self):
-        """ Get the position of the local processes frames from the global \
-        index of frames. """
+        """ Get the global frame index. """
         return self.global_index
+        
 
     def set_current_slice_list(self, sl):
         self.slice_list = sl
@@ -401,6 +418,12 @@ class Plugin(PluginDatasets):
 
         """
         return 1
+
+    def nClone_datasets(self):
+        """ The number of output datasets that have an clone - i.e. they take\
+        it in turns to be used as output in an iterative plugin.
+        """
+        return 0
 
     def nFrames(self):
         """ The number of frames to process during each call to process_frames.

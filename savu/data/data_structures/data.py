@@ -22,11 +22,11 @@
 
 """
 
-import savu.data.data_structures.utils as dsu
 import savu.core.utils as cu
 from savu.data.meta_data import MetaData
-from savu.data.data_structures.data_create import DataCreate
+import savu.data.data_structures.utils as dsu
 from savu.data.data_structures.preview import Preview
+from savu.data.data_structures.data_create import DataCreate
 
 
 class Data(DataCreate):
@@ -95,6 +95,7 @@ class Data(DataCreate):
                          "_transport_data"
         transport_data = cu.import_class(transport_data)
         self.transport_data = transport_data(self)
+        self.data_info.set('transport', transport)
 
     def _get_transport_data(self):
         return self.transport_data
@@ -152,6 +153,9 @@ class Data(DataCreate):
                              "coincide with the number of data "
                              "dimensions %d." % (nDims, len(shape)))
                 raise Exception(error_msg)
+
+    def _set_name(self, name):
+        self.data_info.set('name', name)
 
     def get_name(self):
         """ Get data name.
@@ -241,12 +245,15 @@ class Data(DataCreate):
         self.data_info.set('nDims', len(args))
         axis_labels = []
         for arg in args:
-            try:
-                axis = arg.split('.')
-                axis_labels.append({axis[0]: axis[1]})
-            except:
-                # data arrives here, but that may be an error
-                pass
+            if isinstance(arg, dict):
+                axis_labels.append(arg)
+            else:
+                try:
+                    axis = arg.split('.')
+                    axis_labels.append({axis[0]: axis[1]})
+                except:
+                    # data arrives here, but that may be an error
+                    pass
         self.data_info.set('axis_labels', axis_labels)
 
     def get_axis_labels(self):
@@ -386,3 +393,11 @@ class Data(DataCreate):
         :rtype: tuple
         """
         return self._get_plugin_data().get_pattern().values()[0]['slice_dims']
+
+    def get_itemsize(self):
+        """ Returns bytes per entry """
+        dtype = self.get_dtype()
+        if not dtype:
+            self.set_dtype(None)
+            dtype = self.get_dtype()
+        return self.get_dtype().itemsize

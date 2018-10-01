@@ -31,6 +31,9 @@ class MRC(BaseType):
 
     def __init__(self, Data, filename, stats=None):
         self._data_obj = Data
+        self.filename = filename
+        super(MRC, self).__init__()
+
         self.yz_swapped = False
         header_size = 1024
         self.file = open(filename, 'rb')
@@ -45,6 +48,10 @@ class MRC(BaseType):
 
         self.data = np.memmap(filename, dtype=self.format['dtype'], order='F',
                               mode='r', offset=first, shape=self.shape)
+
+    def clone_data_args(self, args, kwargs, extras):
+        args = ['self', 'filename']
+        return args, kwargs, extras
 
     def __getitem__(self, idx):
         return self.data[idx]
@@ -87,4 +94,3 @@ class MRC(BaseType):
 
     def get_shape(self):
         return self.shape
-

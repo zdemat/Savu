@@ -22,8 +22,9 @@
 """
 import numpy as np
 
-import savu.data.data_structures.data_notes as notes
 from savu.core.utils import docstring_parameter
+from savu.plugins.utils import parse_config_string as parse_str
+import savu.data.data_structures.data_notes as notes
 
 
 class Preview(object):
@@ -33,6 +34,7 @@ class Preview(object):
     def __init__(self, data_obj):
         self._data_obj = data_obj
         self.revert_shape = None
+        self.revert_axis_labels = None
         self.plugin_preview = None
 
     def get_data_obj(self):
@@ -52,6 +54,9 @@ class Preview(object):
         self.revert_shape = kwargs.get('revert', self.revert_shape)
         load = kwargs.get('load', False)
         shape = self.get_data_obj().get_shape()
+        # for backward compatibility
+        preview_list = parse_str(preview_list) if \
+            isinstance(preview_list, str) else preview_list
         preview_list = self.__convert_nprocs(preview_list)
 
         if preview_list:
@@ -86,6 +91,7 @@ class Preview(object):
         :rtype: list
         """
         nEntries = 4
+        plist = [str(i) for i in plist] if isinstance(plist[0], int) else plist
         diff_len = [(nEntries - len(elem.split(':'))) for elem in plist]
         diff3 = [i for i in range(len(diff_len)) if diff_len[i] is 3]
         for dim in diff3:
@@ -125,8 +131,13 @@ class Preview(object):
             slice_list = self._get_preview_slice_list()
             self.get_data_obj().amend_axis_label_values(slice_list)
         if load:
-            entry = self.get_data_obj().get_name() + '_preview_starts'
-            self.get_data_obj().exp.meta_data.set(entry, starts)
+            self.__add_preview_param('starts', starts)
+            self.__add_preview_param('stops', stops)
+            self.__add_preview_param('steps', steps)
+
+    def __add_preview_param(self, name, value):
+        entry = self.get_data_obj().get_name() + '_preview_' + name
+        self.get_data_obj().exp.meta_data.set(entry, value)
 
     def _get_preview_indices(self, preview_list):
         """ Get preview_list ``starts``, ``stops``, ``steps``, ``chunks``
@@ -146,11 +157,11 @@ class Preview(object):
                 preview_list[i] = '0:end:1:1'
             vals = preview_list[i].split(':')
             starts[i], stops[i], steps[i], chunks[i] = \
-                self.__convert_indices(vals, i)
+                self.convert_indices(vals, i)
 
         return starts, stops, steps, chunks
 
-    def __convert_indices(self, idx, dim):
+    def convert_indices(self, idx, dim):
         """ convert keywords to integers.
         """
         dobj = self.get_data_obj()

@@ -38,6 +38,7 @@ class PluginDatasets(object):
         self.variable_data_flag = False
         self.multi_params_dict = {}
         self.extra_dims = []
+        self._max_itemsize = 0        
 
     def __get_data_objects(self, dtype):
         """ Get the data objects associated with the plugin from the experiment
@@ -52,18 +53,52 @@ class PluginDatasets(object):
         data_objs = []
         for data in data_list:
             data_obj = self.exp.index[dtype][data]
-            if data_obj.raw and data_obj.data:
-                self.__add_raw_data(data_obj)
             data_objs.append(data_obj)
         return data_objs
 
-    def __add_raw_data(self, data_obj):
-        from savu.data.data_structures.data_types.data_plus_darks_and_flats\
-            import ImageKey, NoImageKey
-        if isinstance(data_obj.raw, ImageKey) or\
-           isinstance(data_obj.raw, NoImageKey):
+    def _clone_datasets(self):
+        for data_obj in self.exp.index['out_data'].values():
+            if data_obj.raw and data_obj.data:
+                data_obj.raw.create_next_instance(data_obj)
+#                data_obj.clone = True
+
+    def _finalise_datasets(self):
+        in_data, out_data = self.get_datasets()
+        for data in in_data + out_data:
+            data._finalise_patterns()
+
+    def _finalise_plugin_datasets(self):
+        if 'dawn_runner' in self.exp.meta_data.get_dictionary().keys():
             return
-        data_obj.add_raw_data_obj(data_obj)
+
+        in_pData, out_pData = self.get_plugin_datasets()
+        params = {}
+        for pData in in_pData + out_pData:
+            pData._set_meta_data()
+            params[pData] = pData._get_plugin_data_size_params()
+        
+        max_bytes = 0
+        for key, value in params.iteritems():
+            if value['transfer_bytes'] > max_bytes:
+                max_data = key
+                max_bytes = value['transfer_bytes']
+        
+        # set mft and mfp for the largest dataset
+        max_data.plugin_data_transfer_setup()
+        to_set = list(set(params.keys()).difference(set([max_data])))
+        
+        for pData in to_set:
+            if params[pData]['total_frames'] == params[max_data]['total_frames']:
+                pData.plugin_data_transfer_setup(pData=max_data)
+            else:
+                raise Exception("The length of each slice dimension is not equal.")
+#                mData = max_data.meta_data.get
+#                sdir_shape = [mData('shape')[i] for i in mData('sdir')]
+#                mft_list = mData('size_list')
+#                nTrans = int(np.prod([np.ceil(sdir_shape[i]/float(mft_list[i])) for i in range(len(mft_list))]))
+                # need to calculate mft and mfp from nTrans!
+#                td = self.data_obj._get_transport_data()
+#                mfp = td._calc_max_frames_process(pData.max_frames)
 
     def __set_in_datasets(self):
         """ Set the in_data objects.

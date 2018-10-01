@@ -1,32 +1,32 @@
 name: test-environment
 channels:
-  - soft-matter # for pyfftw
   - astra-toolbox
-  - tacaswell
   - dgursoy
+  - conda-forge
+  - anaconda
 dependencies:
   - python=2.7
   - numpy
   - scipy
-  - pyfftw
   - pytest
   - h5py
   - pep8
-  - pytest
   - mpi4py 
   - scikit-image
   - astra-toolbox
   - xraylib
   - tomopy
+  - mock
+  - fabio==0.4.0
+  - pytest-cov
+  - coveralls
+  - pyfai 
+  - pyfftw
+  - colorama
   - pip:
-    - mock
-    - fabio 
-    - pytest-cov
-    - coveralls
-    - pyFAI 
     - nvidia-ml-py
-    - pyfftw
     - peakutils
-    - pymca
-    - colorama
+    - PyMca5
+    - gnureadline
+    - pmacparser
 

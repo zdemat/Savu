@@ -52,7 +52,8 @@ class PluginRunner(object):
         self._run_plugin_list_check(plugin_list)
 
         logging.info('Setting up the experiment')
-        self.exp._experiment_setup()
+        self.exp._experiment_setup(self)
+
         exp_coll = self.exp._get_experiment_collection()
         n_plugins = plugin_list._get_n_processing_plugins()
 
@@ -60,9 +61,19 @@ class PluginRunner(object):
         logging.info('Running transport_pre_plugin_list_run()')
         self._transport_pre_plugin_list_run()
 
-        for i in range(n_plugins):
+        cp = self.exp.checkpoint
+        for i in range(cp.get_checkpoint_plugin(), n_plugins):
             self.exp._set_experiment_for_current_plugin(i)
             self.__run_plugin(exp_coll['plugin_dict'][i])
+            # end the plugin run if savu has been killed
+            self.exp._barrier(msg='PluginRunner: plugin complete.')
+
+            #  ********* transport functions ***********
+            if self._transport_kill_signal():
+                self._transport_cleanup(i+1)
+                break
+            self.exp._barrier(msg='PluginRunner: No kill signal... continue.')
+            cp.output_plugin_checkpoint()
 
         #  ********* transport function ***********
         logging.info('Running transport_post_plugin_list_run')
@@ -72,31 +83,35 @@ class PluginRunner(object):
         for data in self.exp.index['in_data'].values():
             self._transport_terminate_dataset(data)
 
-        cu.user_message("***********************")
-        cu.user_message("* Processing Complete *")
-        cu.user_message("***********************")
+        self.__output_final_message()
 
-        logging.info('Processing complete')
         if self.exp.meta_data.get('email'):
             cu.send_email(self.exp.meta_data.get('email'))
+
         return self.exp
+
+    def __output_final_message(self):
+        kill = True if 'killsignal' in \
+            self.exp.meta_data.get_dictionary().keys() else False
+        msg = "interrupted by killsignal" if kill else "Complete"
+        stars = 40 if kill else 23
+        cu.user_message("*"*stars)
+        cu.user_message("* Processing " + msg + " *")
+        cu.user_message("*"*stars)
 
     def __run_plugin(self, plugin_dict):
         plugin = self._transport_load_plugin(self.exp, plugin_dict)
 
         #  ********* transport function ***********
         self._transport_pre_plugin()
-
         cu.user_message("*Running the %s plugin*" % plugin.name)
 
         #  ******** transport 'process' function is called inside here ********
         plugin._run_plugin(self.exp, self)  # plugin driver
-        self.exp._barrier()
 
+        self.exp._barrier(msg="Plugin returned from driver in Plugin Runner")
         cu._output_summary(self.exp.meta_data.get("mpi"), plugin)
-
         plugin._clean_up()
-
         finalise = self.exp._finalise_experiment_for_current_plugin()
 
         #  ********* transport function ***********
@@ -114,12 +129,9 @@ class PluginRunner(object):
         """
         plugin_list._check_loaders()
         n_loaders = plugin_list._get_n_loaders()
-
         self.__check_gpu()
-
         check_list = np.arange(len(plugin_list.plugin_list)) - n_loaders
         self.__fake_plugin_list_run(plugin_list, check_list, setnxs=True)
-
         savers_idx_before = plugin_list._get_savers_index()
         plugin_list._add_missing_savers(self.exp.index['in_data'].keys())
 
@@ -139,23 +151,24 @@ class PluginRunner(object):
         """ Run through the plugin list without any processing (setup only)\
         and fill in missing dataset names.
         """
-        #plugin_list._reset_datasets_list()
+        # plugin_list._reset_datasets_list()
         n_loaders = self.exp.meta_data.plugin_list._get_n_loaders()
         n_plugins = plugin_list._get_n_processing_plugins()
 
         plist = plugin_list.plugin_list
         for i in range(n_loaders):
-            pu.plugin_loader(self.exp, plugin_list.plugin_list[i])
+            plugin = pu.plugin_loader(self.exp, plugin_list.plugin_list[i])
 
         if setnxs:
             self.exp._set_nxs_filename()
-
+        
         check = [True if x in check_list else False for x in range(n_plugins)]
 
         count = 0
         for i in range(n_loaders, n_loaders+n_plugins):
             self.exp._barrier()
             plugin = pu.plugin_loader(self.exp, plist[i], check=check[count])
+            plugin._revert_preview(plugin.get_in_datasets())
             plist[i]['cite'] = plugin.get_citation_information()
             plugin._clean_up()
             self.exp._merge_out_data_to_in()

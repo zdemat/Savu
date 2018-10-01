@@ -26,7 +26,7 @@ import numpy as np
 from savu.plugins.filters.base_filter import BaseFilter
 from savu.plugins.driver.cpu_plugin import CpuPlugin
 from savu.plugins.utils import register_plugin
-
+from savu.data.plugin_list import CitationInformation
 import unwarp
 
 
@@ -37,12 +37,10 @@ class DistortionCorrection(BaseFilter, CpuPlugin):
 
     :param polynomial_coeffs: Parameters of the radial distortion \
     function. Default: (1.00015076, 1.9289e-6, -2.4325e-8, 1.00439e-11, -3.99352e-15).
-    :param centre_y: The det_y coordinate of the centre of \
-    distortion=(det_y, det_x) with origin (0, 0) in the top left \
-    corner. Default: 995.24.
-    :param centre_x: The det_x coordinate of the centre of \
-    distortion=(det_y, det_x) with origin (0, 0) in the top left \
-    corner. Default: 1283.25.
+    :param centre_from_top: The centre of distortion in pixels from the top \
+    of the image. Default: 995.24.
+    :param centre_from_left: The centre of distortion in pixels from the left \
+    of the image. Default: 1283.25.
     :u*param crop_edges: When applied to previewed/cropped data, the result \
     may contain zeros around the edges, which can be removed by \
     cropping the edges by a specified number of pixels. Default: 0
@@ -55,20 +53,25 @@ class DistortionCorrection(BaseFilter, CpuPlugin):
         in_pData = self.get_plugin_in_datasets()[0]
         data = self.get_in_datasets()[0]
 
-        dict_entry = data.get_name() + '_preview_starts'
-        shift = self.exp.meta_data.get(dict_entry)
+        name = data.get_name()
+        shift = self.exp.meta_data.get(name + '_preview_starts')
+        step = self.exp.meta_data.get(name + '_preview_steps')
 
         det_y = data.get_data_dimension_by_axis_label('detector_y')
         det_x = data.get_data_dimension_by_axis_label('detector_x')
 
+        # check stepping as should not be > 1
+        self.step_check = \
+            True if max([step[i] for i in [det_y, det_x]]) > 1 else False
+
         # If the data is cropped then the centre of distortion must be shifted
         # accordingly, e.g if preview is [:, a:b, c:d] then shift is (a, c)
-        centre = np.array([self.parameters['centre_x'],
-                           self.parameters['centre_y']])
-        centre[0] -= shift[det_y]
-        centre[1] -= shift[det_x]
-        # flipping the values
-        centre = centre[::-1]
+
+        centre = np.array([self.parameters['centre_from_left'],
+                           self.parameters['centre_from_top']])
+
+        centre[0] -= shift[det_x]
+        centre[1] -= shift[det_y]
 
         # pass two empty arrays of frame chunk size
         unwarp.setcoeff(*self.parameters['polynomial_coeffs'])
@@ -77,11 +80,11 @@ class DistortionCorrection(BaseFilter, CpuPlugin):
         temp_array = np.empty(plugin_data_shape, dtype=np.float32)
         unwarp.setup(temp_array, temp_array)
 
-        self.new_slice = [slice(None)]*3
+        self.new_slice = [slice(None)] * 3
         orig_shape = self.get_in_datasets()[0].get_shape()
         for ddir in self.core_dims:
             self.new_slice[ddir] = \
-                slice(self.crop, orig_shape[ddir]-self.crop)
+                slice(self.crop, orig_shape[ddir] - self.crop)
 
     def process_frames(self, data):
         result = np.empty_like(data[0])
@@ -104,7 +107,7 @@ class DistortionCorrection(BaseFilter, CpuPlugin):
         self.crop = self.parameters['crop_edges']
 
         for ddir in self.core_dims:
-            self.shape[ddir] = self.shape[ddir] - 2*self.crop
+            self.shape[ddir] = self.shape[ddir] - 2 * self.crop
         out_dataset[0].create_dataset(patterns=in_dataset[0],
                                       axis_labels=in_dataset[0],
                                       shape=tuple(self.shape))
@@ -112,3 +115,35 @@ class DistortionCorrection(BaseFilter, CpuPlugin):
 
     def get_max_frames(self):
         return 'multiple'
+
+    def executive_summary(self):
+        if self.step_check:
+            msg = "\n\tWARNING: Incompatibility with loader 'preview' "\
+                  "parameters. \n\tThis plugin will currently produce "\
+                  "incorrect results if a \n\tdetector dimension has step "\
+                  "length greater than 1.\n\tPlease remove the stepping or "\
+                  "remove the plugin."
+            return [msg]
+        else:
+            return ["Nothing to Report"]
+
+    def get_citation_information(self):
+        cite_info = CitationInformation()
+        cite_info.description = \
+            ("The distortion correction used in this processing chain is taken\
+             from this work.")
+        cite_info.bibtex = \
+            ("@article{Vo:15,\n" +
+             "title={Radial lens distortion correction with sub-pixel accuracy \
+             for X-ray micro-tomography},\n" +
+             "author={Nghia T. Vo and Robert C. Atwood and \
+             Michael Drakopoulos},\n" +
+             "journal={Optics. Express},\n" +
+             "volume={23},\n" +
+             "number={25},\n" +
+             "pages={32859--32868},\n" +
+             "year={2015},\n" +
+             "publisher={OSA Publishing}" +
+             "}")
+        cite_info.doi = "doi: DOI: 10.1364/OE.23.032859"
+        return cite_info

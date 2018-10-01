@@ -37,7 +37,7 @@ import savu.data.data_structures.utils as du
 if os.name == 'nt':
     import win_readline as readline
 else:
-    import readline
+    import gnureadline as readline
 
 histfile = os.path.join(os.path.expanduser("~"), ".savuhist")
 try:
@@ -83,18 +83,17 @@ def parse_args(function):
 def error_catcher(function):
     @wraps(function)
     def error_catcher_wrap_function(content, args):
-        command = function.__name__.split('_')[1]
         try:
             return function(content, args)
         except Exception as e:
             savu_error = True if len(e.message.split()) > 1 and \
                 e.message.split()[1] == 'ERROR:' else False
+
             if error_level is 0 and savu_error:
                 print e.message
-            if error_level is 0:
-                print("Please type '%s -h' for help." % command)
-
-            if error_level is 1:
+            elif error_level is 0:
+                print "%s: %s" % (type(e).__name__, e.message)
+            elif error_level is 1:
                 traceback.print_exc(file=sys.stdout)
 
             return content
@@ -109,7 +108,8 @@ def _add_module(loader, module_name):
             pass
 
 
-def populate_plugins():
+# change this to dawn=False!!!!!!!!!!!!!!!!!!!!!!!!!
+def populate_plugins(dawn=True):
     # load all the plugins
     plugins_path = pu.get_plugins_paths()
     savu_path = plugins_path[-1].split('savu')[0]
@@ -125,6 +125,11 @@ def populate_plugins():
         if module_name.split('savu.plugins')[0] == '':
             _add_module(loader, module_name)
 
+    if dawn:
+        _dawn_setup()
+
+
+def _dawn_setup():
     for plugin in pu.dawn_plugins.keys():
         p = pu.plugins[plugin]()
         pu.dawn_plugins[plugin]['input rank'] = \

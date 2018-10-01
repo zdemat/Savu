@@ -30,10 +30,6 @@ class BaseAstraRecon(BaseRecon):
     """
     A Plugin to perform Astra toolbox reconstruction
 
-    :u*param FBP_filter: The FBP reconstruction filter type (none|ram-lak|\
-        shepp-logan|cosine|hamming|hann|tukey|lanczos|triangular|gaussian|\
-        barlett-hann|blackman|nuttall|blackman-harris|blackman-nuttall|\
-        flat-top|kaiser|parzen). Default: 'ram-lak'.
     :u*param n_iterations: Number of Iterations - only valid for iterative \
         algorithms. Default: 1.
     """
@@ -57,11 +53,16 @@ class BaseAstraRecon(BaseRecon):
             in_data = self.get_in_datasets()[0]
             dim_detX = \
                 in_data.get_data_dimension_by_axis_label('y', contains=True)
-            shape = (in_data.get_shape()[dim_detX],
-                     self.parameters['n_iterations'])
+
+            nIts = self.parameters['n_iterations']
+            nIts = nIts if isinstance(nIts, list) else [nIts]
+            self.len_res = max(nIts)
+            shape = (in_data.get_shape()[dim_detX], max(nIts))
+
             label = ['vol_y.voxel', 'iteration.number']
             pattern = {'name': 'SINOGRAM', 'slice_dims': (0,),
                        'core_dims': (1,)}
+
             out_dataset[1].create_dataset(axis_labels=label, shape=shape)
             out_dataset[1].add_pattern(pattern['name'],
                                        slice_dims=pattern['slice_dims'],
@@ -112,7 +113,7 @@ class BaseAstraRecon(BaseRecon):
         cor, angles, vol_shape, init = self.get_frame_params()
         angles = np.deg2rad(angles)
         if self.res:
-            res = np.zeros(self.iters)
+            res = np.zeros(self.len_res)
         # create volume geom
         vol_geom = astra.create_vol_geom(vol_shape)
         # create projection geom
@@ -158,7 +159,9 @@ class BaseAstraRecon(BaseRecon):
         cfg['ReconstructionDataId'] = rec_id
         cfg['ProjectionDataId'] = sino_id
         if 'FBP' in self.alg:
-            cfg['FilterType'] = self.parameters['FBP_filter']
+            fbp_filter = self.parameters['FBP_filter'] if 'FBP_filter' in \
+                self.parameters.keys() else 'none'
+            cfg['FilterType'] = fbp_filter
         if 'projector' in self.parameters.keys():
             proj_id = astra.create_projector(
                 self.parameters['projector'], proj_geom, vol_geom)

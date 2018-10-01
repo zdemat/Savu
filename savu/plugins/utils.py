@@ -22,12 +22,16 @@
 """
 
 import os
+import re
 import sys
+import ast
 import logging
 import savu
 import copy
 import importlib
 import imp
+import inspect
+from itertools import izip_longest
 
 
 plugins = {}
@@ -35,6 +39,10 @@ plugins_path = {}
 dawn_plugins = {}
 dawn_plugin_params = {}
 count = 0
+
+OUTPUT_TYPE_DATA_ONLY = 0
+OUTPUT_TYPE_METADATA_ONLY = 1
+OUTPUT_TYPE_METADATA_AND_DATA = 2
 
 
 def register_plugin(clazz):
@@ -45,19 +53,30 @@ def register_plugin(clazz):
     return clazz
 
 
-def dawn_compatible(clazz):
-    """
-    decorator to add dawn compatible plugins and details to a central register
-    """
-    dawn_plugins[clazz.__name__] = {}
-    try:
-        plugin_path = sys.modules[clazz.__module__].__file__
-        # looks out for .pyc files
-        dawn_plugins[clazz.__name__]['path2plugin'] = \
-            plugin_path.split('.py')[0]+'.py'
-    except Exception as e:
-        print e
-    return clazz
+def dawn_compatible(plugin_output_type=OUTPUT_TYPE_METADATA_AND_DATA):
+    def _dawn_compatible(clazz):
+        """
+        decorator to add dawn compatible plugins and details to a central
+        register
+        """
+        dawn_plugins[clazz.__name__] = {}
+        try:
+            plugin_path = sys.modules[clazz.__module__].__file__
+            # looks out for .pyc files
+            dawn_plugins[clazz.__name__]['path2plugin'] = \
+                plugin_path.split('.py')[0]+'.py'
+            dawn_plugins[clazz.__name__]['plugin_output_type'] =\
+                _plugin_output_type
+        except Exception as e:
+            print e
+        return clazz
+    # for backwards compatibility, if decorator is invoked without brackets...
+    if inspect.isclass(plugin_output_type):
+        _plugin_output_type = OUTPUT_TYPE_METADATA_AND_DATA
+        return _dawn_compatible(plugin_output_type)
+    else:
+        _plugin_output_type = plugin_output_type
+        return _dawn_compatible
 
 
 def get_plugin(plugin_name):
@@ -74,7 +93,7 @@ def get_plugin(plugin_name):
     return instance
 
 
-def load_class(name):
+def load_class(name, cls_name=None):
     """ Returns an instance of the class associated with the module name.
 
     :param name: Module name or path to a module file
@@ -82,7 +101,8 @@ def load_class(name):
     """
     path = name if os.path.dirname(name) else None
     name = os.path.basename(os.path.splitext(name)[0]) if path else name
-    cls_name = ''.join(x.capitalize() for x in name.split('.')[-1].split('_'))
+    cls_name = ''.join(x.capitalize() for x in name.split('.')[-1].split('_'))\
+        if not cls_name else cls_name
     if cls_name in plugins.keys():
         return plugins[cls_name]
     mod = \
@@ -99,6 +119,10 @@ def plugin_loader(exp, plugin_dict, **kwargs):
         logging.error("failed to load the plugin")
         logging.error(e)
         raise e
+
+    # set up the experiment param here so exp meta data is available for
+    # dynamic data info functions
+    plugin.exp = exp
 
     check_flag = kwargs.get('check', False)
     if check_flag:
@@ -130,10 +154,16 @@ def set_datasets(exp, plugin, plugin_dict):
     in_names = ('all' if len(in_names) is 0 else in_names)
     out_names = (copy.copy(in_names) if len(out_names) is 0 else out_names)
 
-    in_names = check_nDatasets(exp, in_names, plugin_dict,
-                               plugin.nInput_datasets(), "in_data")
-    out_names = check_nDatasets(exp, out_names, plugin_dict,
-                                plugin.nOutput_datasets(), "out_data")
+    in_names = check_nDatasets(
+            exp, in_names, plugin_dict, plugin.nInput_datasets(), "in_data")
+
+    clones = plugin.nClone_datasets()
+    out_names = check_nDatasets(
+            exp, out_names, plugin_dict, plugin.nOutput_datasets(),
+            "out_data", clones=clones)
+
+    if clones:
+        out_names.extend(['itr_clone' + str(i) for i in range(clones)])
 
     for i in range(len(out_names)):
         new = out_names[i].split('in_datasets')
@@ -156,7 +186,7 @@ def get_names(pdict, key):
     return data_names
 
 
-def check_nDatasets(exp, names, plugin_dict, nSets, dtype):
+def check_nDatasets(exp, names, plugin_dict, nSets, dtype, clones=0):
     plugin_id = plugin_dict['id']
 
     try:
@@ -169,7 +199,7 @@ def check_nDatasets(exp, names, plugin_dict, nSets, dtype):
     if nSets is 'var':
         nSets = len(plugin_dict['data'][dtype + 'sets'])
 
-    if len(names) is not nSets:
+    if len(names) is not (nSets - clones):
         if nSets is 0:
             names = []
         else:
@@ -203,3 +233,60 @@ def get_plugins_paths():
     # now add the savu plugin path, which is now the whole path.
     plugins_paths.append(os.path.join(savu.__path__[0]) + '/../')
     return plugins_paths
+
+
+def is_template_param(param):
+    """ Identifies if the parameter should be included in an input template
+    and returns the default value of the parameter if it exists.
+    """
+    start = 0
+    ptype = 'local'
+    if isinstance(param, str):
+        param = param.strip()
+        if not param.split('global')[0]:
+            ptype = 'global'
+            start = 6
+        first, last = param[start], param[-1]
+        if first == '<' and last == '>':
+            param = param[start+1:-1]
+            try:
+                exec("param = " + param)
+            except:
+                pass
+            return [ptype, param]
+    return False
+
+
+def blockPrint():
+    """ Disable printing to stdout """
+    import tempfile
+    fname = tempfile.mkdtemp() + '/unwanted_prints.txt'
+    sys.stdout = open(fname, 'w')
+
+
+def enablePrint():
+    """ Enable printing to stdout """
+    sys.stdout = sys.__stdout__
+
+
+def parse_config_string(string):
+    regex = "[\[\]\, ]+"
+    split_vals = filter(None, re.split(regex, string))
+    delimitors = re.findall(regex, string)
+    split_vals = [repr(a.strip()) for a in split_vals]
+    zipped = izip_longest(delimitors, split_vals)
+    string = ''.join([i for l in zipped for i in l if i is not None])
+    try:
+        return ast.literal_eval(string)
+    except ValueError:
+        return ast.literal_eval(parse_array_index_as_string(string))
+
+
+def parse_array_index_as_string(string):
+    p = re.compile("'\['")
+    for m in p.finditer(string):
+        offset = m.start() - count + 3
+        end = string[offset:].index("']") + offset
+        string = string[:end] + "]'" + string[end+2:]
+    string = string.replace("'['", '[')
+    return string
